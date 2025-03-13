@@ -1,16 +1,14 @@
 const peerConnections = {};
 const config = {
   iceServers: [
-    { 
-      "urls": "stun:stun.l.google.com:19302",
+    {
+      urls: "stun:stun.l.google.com:19302",
     },
-    // { 
-    //   "urls": "turn:TURN_IP?transport=tcp",
-    //   "username": "TURN_USERNAME",
-    //   "credential": "TURN_CREDENTIALS"
-    // }
-  ]
+  ],
 };
+
+const cameraName = "droidcam"; 
+// Cambia esto al nombre de la cámara que quieras usar (el nombre tiene que estar en minusculas)
 
 const socket = io.connect(window.location.origin);
 
@@ -18,14 +16,15 @@ socket.on("answer", (id, description) => {
   peerConnections[id].setRemoteDescription(description);
 });
 
-socket.on("watcher", id => {
+socket.on("watcher", (id) => {
   const peerConnection = new RTCPeerConnection(config);
   peerConnections[id] = peerConnection;
 
-  let stream = videoElement.srcObject;
-  stream.getTracks().forEach(track => peerConnection.addTrack(track, stream));
+  // Use the global stream from the selected camera
+  let stream = window.stream;
+  stream.getTracks().forEach((track) => peerConnection.addTrack(track, stream));
 
-  peerConnection.onicecandidate = event => {
+  peerConnection.onicecandidate = (event) => {
     if (event.candidate) {
       socket.emit("candidate", id, event.candidate);
     }
@@ -33,7 +32,7 @@ socket.on("watcher", id => {
 
   peerConnection
     .createOffer()
-    .then(sdp => peerConnection.setLocalDescription(sdp))
+    .then((sdp) => peerConnection.setLocalDescription(sdp))
     .then(() => {
       socket.emit("offer", id, peerConnection.localDescription);
     });
@@ -43,72 +42,68 @@ socket.on("candidate", (id, candidate) => {
   peerConnections[id].addIceCandidate(new RTCIceCandidate(candidate));
 });
 
-socket.on("disconnectPeer", id => {
-  peerConnections[id].close();
-  delete peerConnections[id];
+socket.on("disconnectPeer", (id) => {
+  if (peerConnections[id]) {
+    peerConnections[id].close();
+    delete peerConnections[id];
+  }
 });
 
 window.onunload = window.onbeforeunload = () => {
   socket.close();
 };
 
-// Get camera and microphone
+// Get the video element from the HTML
 const videoElement = document.querySelector("video");
-const audioSelect = document.querySelector("select#audioSource");
-const videoSelect = document.querySelector("select#videoSource");
 
-audioSelect.onchange = getStream;
-videoSelect.onchange = getStream;
-
-getStream()
-  .then(getDevices)
-  .then(gotDevices);
-
-function getDevices() {
-  return navigator.mediaDevices.enumerateDevices();
-}
-
-function gotDevices(deviceInfos) {
-  window.deviceInfos = deviceInfos;
-  for (const deviceInfo of deviceInfos) {
-    const option = document.createElement("option");
-    option.value = deviceInfo.deviceId;
-    if (deviceInfo.kind === "audioinput") {
-      option.text = deviceInfo.label || `Microphone ${audioSelect.length + 1}`;
-      audioSelect.appendChild(option);
-    } else if (deviceInfo.kind === "videoinput") {
-      option.text = deviceInfo.label || `Camera ${videoSelect.length + 1}`;
-      videoSelect.appendChild(option);
-    }
-  }
-}
+getStream();
 
 function getStream() {
   if (window.stream) {
-    window.stream.getTracks().forEach(track => {
+    window.stream.getTracks().forEach((track) => {
       track.stop();
     });
   }
-  const audioSource = audioSelect.value;
-  const videoSource = videoSelect.value;
-  const constraints = {
-    audio: { deviceId: audioSource ? { exact: audioSource } : undefined },
-    video: { deviceId: videoSource ? { exact: videoSource } : undefined }
-  };
+
   return navigator.mediaDevices
-    .getUserMedia(constraints)
+    .enumerateDevices()
+    .then((devices) => {
+      const camera = devices.find(
+        (device) =>
+          device.kind === "videoinput" &&
+          device.label.toLowerCase().includes(cameraName)
+      );
+
+      if (!camera) {
+        throw new Error("Camera not found.");
+      }
+
+      const audioDevice = devices.find(
+        (device) => device.kind === "audioinput"
+      );
+
+      const constraints = {
+        audio: audioDevice
+          ? { deviceId: { exact: audioDevice.deviceId } }
+          : true,
+        video: { deviceId: { exact: camera.deviceId } },
+      };
+
+      console.log("Using video device:", camera.label);
+      if (audioDevice) {
+        console.log("Using audio device:", audioDevice.label);
+      } else {
+        console.log("No audio input device found, using default audio.");
+      }
+
+      return navigator.mediaDevices.getUserMedia(constraints);
+    })
     .then(gotStream)
     .catch(handleError);
 }
 
 function gotStream(stream) {
   window.stream = stream;
-  audioSelect.selectedIndex = [...audioSelect.options].findIndex(
-    option => option.text === stream.getAudioTracks()[0].label
-  );
-  videoSelect.selectedIndex = [...videoSelect.options].findIndex(
-    option => option.text === stream.getVideoTracks()[0].label
-  );
   videoElement.srcObject = stream;
   socket.emit("broadcaster");
 }

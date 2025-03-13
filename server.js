@@ -1,35 +1,44 @@
 const express = require("express");
 const app = express();
+const http = require("http").createServer(app);
+const io = require("socket.io")(http);
 
-let broadcaster;
-const port = 4000;
-
-const http = require("http");
-const server = http.createServer(app);
-
-const io = require("socket.io")(server);
 app.use(express.static(__dirname + "/public"));
 
-io.sockets.on("error", e => console.log(e));
-io.sockets.on("connection", socket => {
+let connections = [];
+const PORT = 4000;
+
+io.on("connection", (socket) => {
+  connections.push(socket.id);
+  console.log(`Hay ${connections.length} sockets conectados`);
+
   socket.on("broadcaster", () => {
-    broadcaster = socket.id;
     socket.broadcast.emit("broadcaster");
   });
+
   socket.on("watcher", () => {
-    socket.to(broadcaster).emit("watcher", socket.id);
+    socket.broadcast.emit("watcher", socket.id);
   });
-  socket.on("offer", (id, message) => {
-    socket.to(id).emit("offer", socket.id, message);
+
+  socket.on("offer", (id, description) => {
+    io.to(id).emit("offer", socket.id, description);
   });
-  socket.on("answer", (id, message) => {
-    socket.to(id).emit("answer", socket.id, message);
+
+  socket.on("answer", (id, description) => {
+    io.to(id).emit("answer", socket.id, description);
   });
-  socket.on("candidate", (id, message) => {
-    socket.to(id).emit("candidate", socket.id, message);
+
+  socket.on("candidate", (id, candidate) => {
+    io.to(id).emit("candidate", socket.id, candidate);
   });
+
   socket.on("disconnect", () => {
-    socket.to(broadcaster).emit("disconnectPeer", socket.id);
+    connections.splice(connections.indexOf(socket.id), 1);
+    console.log(`Hay ${connections.length} sockets conectados`);
+    socket.broadcast.emit("disconnectPeer", socket.id);
   });
 });
-server.listen(port, () => console.log(`Server is running on port ${port}`));
+
+http.listen(PORT, () => {
+  console.log(`Servidor iniciado en http://localhost:${PORT}`);
+});

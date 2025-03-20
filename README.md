@@ -9,6 +9,10 @@
 Para definir el nombre de la cámara diríjase al archivo `public/broadcast.js` y modifique el valor de la variable `cameraName` con el nombre (en minúsculas) de la cámara que desea usar.
 Luego en la terminal ejecute el siguiente comando:
 ```sh
-./run.sh
+$ ./run.sh
 ```
-
+#### Debian or Ubuntu
+```sh
+$ chmod +x ./run.sh
+$ ./run.sh
+```

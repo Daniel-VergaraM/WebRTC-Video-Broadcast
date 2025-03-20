@@ -11,7 +11,7 @@ Luego en la terminal ejecute el siguiente comando:
 ```sh
 $ ./run.sh
 ```
-#### Debian or Ubuntu
+#### Debian/Ubuntu
 ```sh
 $ chmod +x ./run.sh
 $ ./run.sh
